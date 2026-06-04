@@ -1,3 +1,12 @@
+---
+title: RidgeVision AI
+emoji: 🧬
+colorFrom: blue
+colorTo: purple
+sdk: docker
+pinned: false
+---
+
 # RidgeVision AI
 
 Experimental AI-powered dermatoglyphic analysis platform for fingerprint-based ABO/Rh pattern estimation using deep learning, texture feature extraction, and explainable AI.
