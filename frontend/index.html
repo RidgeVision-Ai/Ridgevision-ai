@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RidgeVision AI - Non-Invasive ABO Estimation</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            lab: { bg: '#F4F3F5', violet: '#4C1D95', violetLight: '#7C3AED' },
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+          },
+          boxShadow: {
+            card: '0 4px 24px rgba(76, 29, 149, 0.08), 0 1px 3px rgba(0,0,0,0.04)',
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body { background-color: #F4F3F5; }
+    .layer { transition: opacity 0.45s ease, transform 0.45s ease; }
+    .layer-hidden { opacity: 0; pointer-events: none; position: absolute; inset: 0; transform: translateY(12px); }
+    .layer-active { opacity: 1; pointer-events: auto; position: relative; transform: translateY(0); }
+    .prob-bar { transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+    @keyframes scanPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.35); }
+      50% { box-shadow: 0 0 0 14px rgba(124, 58, 237, 0); }
+    }
+    .scanner-ring { animation: scanPulse 2s ease-in-out infinite; }
+  </style>
+</head>
+<body class="min-h-screen font-sans text-gray-800 antialiased">
+  <header class="border-b border-violet-100/80 bg-white/70 backdrop-blur-sm sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-lab-violet flex items-center justify-center text-white font-bold text-sm shadow-card">RV</div>
+        <div>
+          <h1 class="text-lg font-semibold text-lab-violet tracking-tight">RidgeVision AI</h1>
+          <p class="text-xs text-gray-500">RidgeAttenFusionNet - Dual-Branch ABO Estimation</p>
+        </div>
+      </div>
+      <span class="hidden sm:inline-flex items-center gap-2 text-xs font-mono text-gray-400 bg-white px-3 py-1.5 rounded-full shadow-card">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        Research Prototype v1.0
+      </span>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-6 py-10 relative min-h-[70vh]">
+    <section id="layer-ingest" class="layer layer-active">
+      <div class="bg-white rounded-2xl shadow-card p-8 md:p-12">
+        <div class="text-center mb-8">
+          <h2 class="text-2xl font-semibold text-lab-violet mb-2">Fingerprint Scanner</h2>
+          <p class="text-gray-500 text-sm max-w-md mx-auto">
+            Upload a dermatoglyphic imprint for experimental ABO/Rh inference with Grad-CAM explainability.
+          </p>
+        </div>
+
+        <div
+          id="drop-zone"
+          class="relative border-2 border-dashed border-violet-200 rounded-2xl p-12 md:p-16 text-center cursor-pointer hover:border-lab-violetLight hover:bg-violet-50/30 transition-all duration-300"
+        >
+          <div class="scanner-ring inline-flex items-center justify-center w-28 h-28 rounded-full ring-4 ring-violet-400 mb-6">
+            <svg class="w-12 h-12 text-lab-violet" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+          </div>
+          <p class="text-lab-violet font-medium mb-1">Drag & drop fingerprint image</p>
+          <p class="text-gray-400 text-sm">or click to browse - PNG, JPG, BMP</p>
+          <input type="file" id="file-input" accept="image/*" class="hidden" />
+        </div>
+
+        <p id="ingest-error" class="mt-4 text-center text-sm text-red-600 hidden"></p>
+      </div>
+    </section>
+
+    <section id="layer-inference" class="layer layer-hidden">
+      <div class="bg-white rounded-2xl shadow-card p-10 md:p-14">
+        <div class="text-center mb-10">
+          <h2 class="text-xl font-semibold text-lab-violet mb-2">AI Inference Engine</h2>
+          <p id="inference-status" class="text-sm text-gray-500 font-mono">Initializing ridge preprocessing...</p>
+        </div>
+
+        <div class="w-full max-w-lg mx-auto">
+          <div class="h-2.5 bg-violet-100 rounded-full overflow-hidden">
+            <div id="progress-bar" class="h-full bg-gradient-to-r from-lab-violet to-violet-400 rounded-full prob-bar" style="width: 0%"></div>
+          </div>
+          <div class="flex justify-between mt-3 text-xs font-mono text-gray-400">
+            <span>CLAHE + Gabor</span>
+            <span>LBP / GLCM</span>
+            <span>Fusion MLP</span>
+            <span>Grad-CAM</span>
+          </div>
+        </div>
+
+        <div class="mt-12 flex justify-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-lab-violet animate-bounce" style="animation-delay: 0ms"></span>
+          <span class="w-2 h-2 rounded-full bg-lab-violet animate-bounce" style="animation-delay: 150ms"></span>
+          <span class="w-2 h-2 rounded-full bg-lab-violet animate-bounce" style="animation-delay: 300ms"></span>
+        </div>
+      </div>
+    </section>
+
+    <section id="layer-report" class="layer layer-hidden">
+      <div class="bg-white rounded-2xl shadow-card overflow-hidden">
+        <div class="px-8 py-6 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 class="text-xl font-semibold text-lab-violet">Diagnostic Report</h2>
+            <p class="text-sm text-gray-500">Dual-branch fusion inference complete</p>
+          </div>
+          <button
+            id="btn-reset"
+            type="button"
+            class="px-5 py-2.5 rounded-xl border border-violet-200 text-lab-violet text-sm font-medium hover:bg-violet-50 transition-colors"
+          >
+            Reset Scanner
+          </button>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-gray-100">
+          <div class="p-8">
+            <div class="mb-8 p-6 rounded-xl bg-gradient-to-br from-violet-50 to-white border border-violet-100">
+              <p class="text-xs uppercase tracking-wider text-gray-400 font-mono mb-1">Top Prediction</p>
+              <p id="pred-class" class="text-4xl font-bold text-lab-violet font-mono">-</p>
+              <p class="mt-2 text-sm text-gray-500">
+                Confidence: <span id="pred-confidence" class="font-mono font-semibold text-lab-violet">-</span>%
+              </p>
+            </div>
+
+            <p class="text-xs uppercase tracking-wider text-gray-400 font-mono mb-4">Class Likelihood Matrix</p>
+            <div id="prob-matrix" class="space-y-3 font-mono text-sm"></div>
+          </div>
+
+          <div class="p-8 flex flex-col">
+            <p class="text-xs uppercase tracking-wider text-gray-400 font-mono mb-4">Grad-CAM Attention Overlay</p>
+            <div class="flex-1 flex items-center justify-center rounded-xl border border-gray-100 bg-gray-50 p-4 min-h-[280px]">
+              <img id="grad-cam-img" alt="Grad-CAM heatmap" class="max-w-full max-h-[360px] rounded-lg shadow-card object-contain" />
+            </div>
+            <p class="mt-3 text-xs text-gray-400 text-center">
+              Experimental attribution overlay - not a clinical diagnostic report.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="max-w-6xl mx-auto px-6 py-8 text-center text-xs text-gray-400">
+    RidgeVision AI - Academic research prototype. Not intended for medical diagnosis or clinical use.
+  </footer>
+
+  <script>
+    (function () {
+      'use strict';
+
+      const API_URL = window.RIDGEVISION_API_URL
+        || (window.location.protocol === 'file:'
+          ? 'http://127.0.0.1:8000/predict'
+          : `${window.location.origin}/predict`);
+      const CLASS_ORDER = ['A+', 'A-', 'AB+', 'AB-', 'B+', 'B-', 'O+', 'O-'];
+
+      const layerIngest = document.getElementById('layer-ingest');
+      const layerInference = document.getElementById('layer-inference');
+      const layerReport = document.getElementById('layer-report');
+      const dropZone = document.getElementById('drop-zone');
+      const fileInput = document.getElementById('file-input');
+      const ingestError = document.getElementById('ingest-error');
+      const progressBar = document.getElementById('progress-bar');
+      const inferenceStatus = document.getElementById('inference-status');
+      const predClass = document.getElementById('pred-class');
+      const predConfidence = document.getElementById('pred-confidence');
+      const probMatrix = document.getElementById('prob-matrix');
+      const gradCamImg = document.getElementById('grad-cam-img');
+      const btnReset = document.getElementById('btn-reset');
+
+      const STATUS_STEPS = [
+        { pct: 18, msg: 'Applying CLAHE contrast normalization...' },
+        { pct: 38, msg: 'Gabor ridge morphology enhancement...' },
+        { pct: 55, msg: 'Extracting LBP histogram and GLCM texture vector...' },
+        { pct: 72, msg: 'Running trained ABO/Rh classifier...' },
+        { pct: 88, msg: 'Generating explainability overlay...' },
+        { pct: 100, msg: 'Finalizing report...' },
+      ];
+
+      let progressTimer = null;
+
+      function showLayer(active) {
+        const layers = [
+          { el: layerIngest, id: 'ingest' },
+          { el: layerInference, id: 'inference' },
+          { el: layerReport, id: 'report' },
+        ];
+        layers.forEach(({ el, id }) => {
+          if (id === active) {
+            el.classList.remove('layer-hidden');
+            el.classList.add('layer-active');
+          } else {
+            el.classList.remove('layer-active');
+            el.classList.add('layer-hidden');
+          }
+        });
+      }
+
+      function clearProgressSimulation() {
+        if (progressTimer) {
+          clearInterval(progressTimer);
+          progressTimer = null;
+        }
+      }
+
+      function startProgressSimulation() {
+        let step = 0;
+        progressBar.style.width = '0%';
+        inferenceStatus.textContent = STATUS_STEPS[0].msg;
+
+        progressTimer = setInterval(() => {
+          if (step < STATUS_STEPS.length) {
+            progressBar.style.width = STATUS_STEPS[step].pct + '%';
+            inferenceStatus.textContent = STATUS_STEPS[step].msg;
+            step += 1;
+          }
+        }, 520);
+      }
+
+      function renderProbabilityMatrix(allProbabilities) {
+        probMatrix.innerHTML = '';
+        const sorted = CLASS_ORDER
+          .map((label) => ({ label, value: allProbabilities[label] ?? 0 }))
+          .sort((a, b) => b.value - a.value);
+
+        sorted.forEach(({ label, value }) => {
+          const row = document.createElement('div');
+          row.className = 'flex items-center gap-3';
+          row.innerHTML = `
+            <span class="w-10 text-lab-violet font-medium">${label}</span>
+            <div class="flex-1 h-6 bg-violet-50 rounded-md overflow-hidden relative">
+              <div class="prob-bar h-full bg-gradient-to-r from-lab-violet to-violet-400 rounded-md" style="width: 0%"></div>
+            </div>
+            <span class="w-14 text-right text-gray-600">${value.toFixed(2)}%</span>
+          `;
+          probMatrix.appendChild(row);
+          requestAnimationFrame(() => {
+            row.querySelector('.prob-bar').style.width = Math.min(value, 100) + '%';
+          });
+        });
+      }
+
+      function renderReport(data) {
+        predClass.textContent = data.predicted_class;
+        predConfidence.textContent = Number(data.confidence).toFixed(2);
+        renderProbabilityMatrix(data.all_probabilities);
+        gradCamImg.src = data.grad_cam_b64;
+        gradCamImg.alt = 'Grad-CAM for ' + data.predicted_class;
+      }
+
+      async function submitPrediction(file) {
+        ingestError.classList.add('hidden');
+        showLayer('inference');
+        startProgressSimulation();
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+          const response = await fetch(API_URL, { method: 'POST', body: formData });
+          const payload = await response.json().catch(() => ({}));
+
+          clearProgressSimulation();
+          progressBar.style.width = '100%';
+
+          if (!response.ok) {
+            throw new Error(payload.detail || payload.error || 'Inference failed.');
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          renderReport(payload);
+          showLayer('report');
+        } catch (err) {
+          clearProgressSimulation();
+          showLayer('ingest');
+          ingestError.textContent = err.message || 'An unexpected error occurred.';
+          ingestError.classList.remove('hidden');
+        }
+      }
+
+      function handleFile(file) {
+        if (!file || !file.type.startsWith('image/')) {
+          ingestError.textContent = 'Please select a valid image file.';
+          ingestError.classList.remove('hidden');
+          return;
+        }
+        submitPrediction(file);
+      }
+
+      dropZone.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', (event) => {
+        if (event.target.files[0]) handleFile(event.target.files[0]);
+      });
+
+      dropZone.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        dropZone.classList.add('border-lab-violet', 'bg-violet-50/40');
+      });
+      dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('border-lab-violet', 'bg-violet-50/40');
+      });
+      dropZone.addEventListener('drop', (event) => {
+        event.preventDefault();
+        dropZone.classList.remove('border-lab-violet', 'bg-violet-50/40');
+        if (event.dataTransfer.files[0]) handleFile(event.dataTransfer.files[0]);
+      });
+
+      btnReset.addEventListener('click', () => {
+        clearProgressSimulation();
+        fileInput.value = '';
+        ingestError.classList.add('hidden');
+        progressBar.style.width = '0%';
+        showLayer('ingest');
+      });
+
+      showLayer('ingest');
+    })();
+  </script>
+</body>
+</html>
