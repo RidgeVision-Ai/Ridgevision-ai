@@ -6,7 +6,6 @@ colorTo: purple
 sdk: docker
 pinned: false
 ---
-
 # 🩸 RidgeVision AI — Fingerprint-Based Blood Group Prediction
 
 <div align="center">
@@ -33,6 +32,7 @@ pinned: false
 ## 📋 Table of Contents
 
 - [Overview](#-overview)
+- [Novelty](#-novelty)
 - [Features](#-features)
 - [System Architecture](#-system-architecture)
 - [Workflow Pipeline](#-workflow-pipeline)
@@ -63,10 +63,26 @@ The ensemble achieves **~89.5%–90% test accuracy** (Kaggle test set evaluation
 
 ---
 
+## 💡 Novelty
+
+RidgeAttenFusionNet introduces several distinctive contributions that differentiate it from prior work in fingerprint-based biometric classification:
+
+| # | Novel Contribution | Description |
+|:-:|:------------------|:------------|
+| 1 | 🔀 **Dual-Branch Hybrid Fusion** | Uniquely combines deep CNN embeddings (EfficientNetB0) with handcrafted texture descriptors (LBP + GLCM + Ridge Density) in a single ensemble — most prior work uses either deep features or handcrafted features, not both |
+| 2 | 🎯 **CBAM Attention on Dermatoglyphics** | First application of Convolutional Block Attention Module (channel + spatial) specifically tuned for fingerprint ridge pattern analysis, enabling the network to focus on biologically relevant ridge regions |
+| 3 | 🧬 **8-Class ABO/Rh Classification** | Extends beyond binary or 4-class ABO systems to full 8-class ABO/Rh prediction (A+, A−, B+, B−, AB+, AB−, O+, O−) — a significantly harder problem rarely addressed in existing literature |
+| 4 | 🔥 **Grad-CAM Explainability for Blood Group Inference** | Integrates gradient-weighted class activation maps to visually explain *which fingerprint regions* drive each blood group prediction, making the system interpretable for research validation |
+| 5 | 🧹 **Domain-Specific Preprocessing Pipeline** | Custom CLAHE + Gabor filter bank (8 orientations × 4 frequencies) preprocessing chain designed specifically for ridge enhancement in fingerprint dermatoglyphics, improving feature quality before model inference |
+| 6 | ⚖️ **Two-Model Weighted Ensemble** | Trains two architecturally distinct CNN variants (Model-88 and Model-91 style) and combines their softmax outputs, achieving ~89.5–90% ensemble accuracy — outperforming each individual model |
+| 7 | 🌐 **End-to-End Web Deployment** | Delivers the full pipeline — from raw fingerprint upload to Grad-CAM-annotated prediction — as a live, publicly accessible web application (HemaPulse AI on Hugging Face Spaces), bridging research and usability |
+
+---
+
 ## ✨ Features
 
 | Feature | Description |
-|--------|-------------|
+|:--------|:------------|
 | 🔍 **Non-Invasive Prediction** | Blood group inference from fingerprint images — no blood sample needed |
 | 🧠 **Dual-Branch Ensemble** | Combines deep CNN features with handcrafted texture descriptors |
 | 🎯 **8-Class Classification** | Supports all ABO/Rh blood groups: A+, A−, B+, B−, AB+, AB−, O+, O− |
@@ -80,79 +96,47 @@ The ensemble achieves **~89.5%–90% test accuracy** (Kaggle test set evaluation
 
 ## 🏗️ System Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        RidgeAttenFusionNet                          │
-│                    Dual-Branch Ensemble Network                      │
-├─────────────────────────────┬───────────────────────────────────────┤
-│        Branch 1 (CNN)       │        Branch 2 (Texture)             │
-│                             │                                       │
-│  Input Fingerprint Image    │  Input Fingerprint Image              │
-│          ↓                  │          ↓                            │
-│  CLAHE Preprocessing        │  CLAHE + Denoising                    │
-│          ↓                  │          ↓                            │
-│  Gabor Filter Enhancement   │  Ridge Enhancement (Gabor)            │
-│          ↓                  │          ↓                            │
-│  EfficientNetB0 Backbone    │  LBP Feature Extraction               │
-│  (Pretrained ImageNet)      │  GLCM Texture Descriptors             │
-│          ↓                  │  Ridge Density Map                    │
-│  CBAM Attention Module      │          ↓                            │
-│  (Channel + Spatial)        │  MLP Feature Fusion                   │
-│          ↓                  │          ↓                            │
-│  Global Average Pooling     │  Dense Layer (256 → 128)              │
-│          ↓                  │          ↓                            │
-│  Dense (512 → 256)          │  BatchNorm + Dropout (0.3)            │
-│          ↓                  │          ↓                            │
-│  Dropout (0.4)              │  Softmax Output (8 classes)           │
-│          ↓                  │                                       │
-│  Softmax Output (8 classes) │                                       │
-├─────────────────────────────┴───────────────────────────────────────┤
-│                      Ensemble Averaging                              │
-│          (Weighted Average of Branch 1 + Branch 2 probabilities)    │
-│                             ↓                                        │
-│            Final Predicted Blood Group (ABO/Rh)                     │
-│                     + Confidence Score                               │
-│                     + Grad-CAM Heatmap                              │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph BRANCH1["🧠 Branch 1 — CNN"]
+        A1["Input Fingerprint Image"] --> B1["CLAHE Preprocessing"]
+        B1 --> C1["Gabor Filter Enhancement"]
+        C1 --> D1["EfficientNetB0 Backbone<br/>(Pretrained ImageNet)"]
+        D1 --> E1["CBAM Attention Module<br/>(Channel + Spatial)"]
+        E1 --> F1["Global Average Pooling"]
+        F1 --> G1["Dense (512 → 256)"]
+        G1 --> H1["Dropout (0.4)"]
+        H1 --> I1["Softmax Output (8 classes)"]
+    end
+
+    subgraph BRANCH2["🔬 Branch 2 — Texture"]
+        A2["Input Fingerprint Image"] --> B2["CLAHE + Denoising"]
+        B2 --> C2["Ridge Enhancement (Gabor)"]
+        C2 --> D2["LBP Feature Extraction<br/>GLCM Texture Descriptors<br/>Ridge Density Map"]
+        D2 --> E2["MLP Feature Fusion"]
+        E2 --> F2["Dense Layer (256 → 128)"]
+        F2 --> G2["BatchNorm + Dropout (0.3)"]
+        G2 --> H2["Softmax Output (8 classes)"]
+    end
+
+    I1 & H2 --> ENS["⚖️ Ensemble Averaging<br/>(Weighted Average of Branch 1 + Branch 2 probabilities)"]
+    ENS --> OUT["🩸 Final Predicted Blood Group (ABO/Rh)<br/>+ Confidence Score + Grad-CAM Heatmap"]
 ```
 
 ---
 
 ## 🔄 Workflow Pipeline
 
-The diagram below illustrates the full end-to-end prediction pipeline:
-
-```
-┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐
-│ User Submits │───▶│   Image is   │───▶│   Key Features are   │
-│ Fingerprint  │    │  Processed   │    │      Identified       │
-│              │    │              │    │                       │
-│ Upload PNG/  │    │ Base64 decode│    │ LBP, GLCM, Ridge      │
-│ JPG/BMP to   │    │ + preparation│    │ Density & Texture     │
-│ web interface│    │ for pipeline │    │ features extracted    │
-└──────────────┘    └──────────────┘    └──────────────────────┘
-                                                   │
-                                                   ▼
-┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐
-│ Visualizes   │    │   System     │    │    Image is          │
-│  Important   │◀───│  Outputs     │◀───│    Enhanced          │
-│   Regions    │    │ Blood Group  │    │                      │
-│              │    │              │    │ CLAHE + Denoising    │
-│ Grad-CAM     │    │ A+, A−, B+,  │    │ + Ridge Enhancement  │
-│ heatmap      │    │ B−, AB+, AB−,│    │ applied to input     │
-│ displayed    │    │ O+, or O−    │    │ fingerprint image    │
-└──────────────┘    └──────────────┘    └──────────────────────┘
-       │                                           │
-       ▼                                           ▼
-┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐
-│  Results are │    │ Confidence   │    │   Model Predicts     │
-│ Presented to │◀───│  Quantified  │◀───│   Blood Group        │
-│    User      │    │              │    │                      │
-│              │    │ Probability  │    │ Pre-trained Keras     │
-│ Results +    │    │ matrix +     │    │ ensemble model        │
-│ Confidence + │    │ class-wise   │    │ runs inference        │
-│ Heatmap shown│    │ scores shown │    │ on processed image   │
-└──────────────┘    └──────────────┘    └──────────────────────┘
+```mermaid
+flowchart LR
+    A["📤 User Submits Fingerprint<br/>Upload PNG/JPG/BMP<br/>to web interface"] --> B["⚙️ Image is Processed<br/>Base64 decode<br/>+ preparation for pipeline"]
+    B --> C["🔍 Key Features Identified<br/>LBP, GLCM, Ridge Density<br/>& Texture features extracted"]
+    C --> D["🎨 Image is Enhanced<br/>CLAHE + Denoising<br/>+ Ridge Enhancement applied"]
+    D --> E["🤖 Model Predicts Blood Group<br/>Pre-trained Keras ensemble<br/>runs inference on processed image"]
+    E --> F["📊 System Outputs Blood Group<br/>A+, A−, B+, B−,<br/>AB+, AB−, O+, or O−"]
+    F --> G["🔥 Visualizes Important Regions<br/>Grad-CAM heatmap displayed"]
+    F --> H["📈 Confidence Quantified<br/>Probability matrix +<br/>class-wise scores shown"]
+    G & H --> I["✅ Results Presented to User<br/>Results + Confidence<br/>+ Heatmap shown"]
 ```
 
 ---
@@ -166,7 +150,7 @@ The diagram below illustrates the full end-to-end prediction pipeline:
 The system trains **two independent CNN models** (Model 88-style and Model 91-style) and averages their softmax outputs:
 
 | Component | Specification |
-|-----------|--------------|
+|:----------|:-------------|
 | **Backbone** | EfficientNetB0 (pretrained on ImageNet) |
 | **Attention** | CBAM — Channel Attention + Spatial Attention |
 | **Texture Features** | LBP (radius=1, 8 neighbors) + GLCM (contrast, correlation, energy, homogeneity) |
@@ -181,38 +165,24 @@ The system trains **two independent CNN models** (Model 88-style and Model 91-st
 
 ### CBAM Attention Module
 
-```
-Input Feature Map
-       ↓
-┌──────────────────────┐
-│  Channel Attention   │  → Global Avg Pool + Global Max Pool → MLP → Sigmoid → Scale
-└──────────────────────┘
-       ↓
-┌──────────────────────┐
-│  Spatial Attention   │  → Channel-wise Avg + Max → Conv2D(7×7) → Sigmoid → Scale
-└──────────────────────┘
-       ↓
-Attended Feature Map
+```mermaid
+flowchart LR
+    A["Input Feature Map"] --> B["Channel Attention\nGlobal Avg Pool + Global Max Pool → MLP → Sigmoid → Scale"]
+    B --> C["Spatial Attention\nChannel-wise Avg + Max → Conv2D(7×7) → Sigmoid → Scale"]
+    C --> D["Attended Feature Map"]
 ```
 
 ### Preprocessing Pipeline
 
-```
-Raw Fingerprint Image
-        ↓
-   Grayscale Convert
-        ↓
-   CLAHE Equalization  ──── (Contrast Limited Adaptive Histogram Equalization)
-        ↓
-   Gaussian Denoising
-        ↓
-   Gabor Ridge Enhancement  ──── (8 orientations × 4 frequencies)
-        ↓
-   Resize to 224×224
-        ↓
-   Normalize [0, 1]
-        ↓
-   Ready for Model Inference
+```mermaid
+flowchart TD
+    A["🖼️ Raw Fingerprint Image"] --> B["Grayscale Convert"]
+    B --> C["CLAHE Equalization\n(Contrast Limited Adaptive Histogram Equalization)"]
+    C --> D["Gaussian Denoising"]
+    D --> E["Gabor Ridge Enhancement\n(8 orientations × 4 frequencies)"]
+    E --> F["Resize to 224×224"]
+    F --> G["Normalize [0, 1]"]
+    G --> H["✅ Ready for Model Inference"]
 ```
 
 ## 📌 Experimental Note
@@ -226,7 +196,7 @@ This system is designed for research purposes to explore potential biometric cor
 ### Ensemble Accuracy: **~89.5%–90%** (Kaggle test set evaluation)
 
 | Model | Test Accuracy |
-|-------|--------------|
+|:------|:-------------|
 | Model 88-style | 86.0% |
 | Model 91-style | 89.4% |
 | **Ensemble (Avg)** | **89.5–90.0%** |
@@ -234,7 +204,7 @@ This system is designed for research purposes to explore potential biometric cor
 ### Per-Class Classification Report (1200 test samples, 150 per class)
 
 | Blood Group | Precision | Recall | F1-Score | Support |
-|------------|-----------|--------|----------|---------|
+|:-----------|:---------:|:------:|:--------:|:-------:|
 | **A+** | 0.88 | 0.89 | 0.88 | 150 |
 | **A−** | 0.92 | 0.89 | 0.91 | 150 |
 | **AB+** | 0.88 | 0.86 | 0.87 | 150 |
@@ -253,18 +223,16 @@ This system is designed for research purposes to explore potential biometric cor
 
 The confusion matrix below shows the RidgeVision Retrained Two-Model Ensemble performance across all 8 blood group classes on the test set:
 
-```
-Actual \ Predicted   A+    A−   AB+   AB−    B+    B−    O+    O−
-─────────────────────────────────────────────────────────────────────
-A+                  134     0     5     0     0     0     3     8
-A−                    0   134     2     2     1     6     3     2
-AB+                   6     0   129     0     8     0     3     4
-AB−                   0     2     0   138     2     4     0     4
-B+                    0     2     5     3   138     2     0     0
-B−                    0     3     0     4     5   138     0     0
-O+                    7     4     1     1     0     0   127    10
-O−                    6     1     4     2     1     0     0   136
-```
+| Actual ↓ \ Predicted → | **A+** | **A−** | **AB+** | **AB−** | **B+** | **B−** | **O+** | **O−** |
+|:-----------------------|:------:|:------:|:-------:|:-------:|:------:|:------:|:------:|:------:|
+| **A+** | **134** | 0 | 5 | 0 | 0 | 0 | 3 | 8 |
+| **A−** | 0 | **134** | 2 | 2 | 1 | 6 | 3 | 2 |
+| **AB+** | 6 | 0 | **129** | 0 | 8 | 0 | 3 | 4 |
+| **AB−** | 0 | 2 | 0 | **138** | 2 | 4 | 0 | 4 |
+| **B+** | 0 | 2 | 5 | 3 | **138** | 2 | 0 | 0 |
+| **B−** | 0 | 3 | 0 | 4 | 5 | **138** | 0 | 0 |
+| **O+** | 7 | 4 | 1 | 1 | 0 | 0 | **127** | 10 |
+| **O−** | 6 | 1 | 4 | 2 | 1 | 0 | 0 | **136** |
 
 **Key Observations:**
 - **AB−** and **B−** achieve the highest per-class accuracy (138/150 correct)
@@ -277,15 +245,15 @@ O−                    6     1     4     2     1     0     0   136
 ## 🛠️ Tech Stack
 
 | Component | Technology | Purpose |
-|----------|------------|---------|
-| Backend Framework | FastAPI | API endpoints, inference handling, and backend logic |
-| Frontend | HTML5, CSS3, JavaScript | User interface for fingerprint upload and results display |
-| Static Hosting | FastAPI StaticFiles | Serves frontend assets |
-| Deep Learning | TensorFlow / Keras | Model training and inference |
-| Computer Vision | OpenCV, scikit-image | Image preprocessing and feature extraction |
-| Explainability | Grad-CAM | Visual explanation of model predictions |
-| Training Environment | Kaggle (GPU P100) | Model training and experimentation |
-| Deployment | Hugging Face Spaces | Cloud hosting and live demo |
+|:----------|:-----------|:--------|
+| **Backend Framework** | FastAPI | API endpoints, inference handling, and backend logic |
+| **Frontend** | HTML5, CSS3, JavaScript | User interface for fingerprint upload and results display |
+| **Static Hosting** | FastAPI StaticFiles | Serves frontend assets |
+| **Deep Learning** | TensorFlow / Keras | Model training and inference |
+| **Computer Vision** | OpenCV, scikit-image | Image preprocessing and feature extraction |
+| **Explainability** | Grad-CAM | Visual explanation of model predictions |
+| **Training Environment** | Kaggle (GPU P100) | Model training and experimentation |
+| **Deployment** | Hugging Face Spaces | Cloud hosting and live demo |
 
 ---
 
@@ -429,16 +397,23 @@ Open your browser at: `http://localhost:8000`
 
 The deployed interface at [sravaninanubala-ridgevision-ai.hf.space](https://sravaninanubala-ridgevision-ai.hf.space/) features:
 
-- **Fingerprint Scanner Panel** — Drag & drop or browse for fingerprint image
-- **AI Inference Engine Panel** — Live pipeline status (CLAHE → LBP/GLCM Fusion → MLP → Grad-CAM)
-- **Diagnostic Report Panel** — Top prediction, confidence score, class likelihood matrix, and Grad-CAM heatmap overlay
+**Step 1 — Fingerprint Scanner Panel**
+
+![RidgeVision AI — Fingerprint Scanner](screenshot_scanner.png)<img width="1920" height="1140" alt="screenshot_scanner" src="https://github.com/user-attachments/assets/fcc14b43-3887-49bc-8cd3-0f81dbe81695" />
+
+
+**Step 2 — Diagnostic Report Panel**
+
+![RidgeVision AI — Diagnostic Report](screenshot_results.png)<img width="1920" height="1140" alt="screenshot_results" src="https://github.com/user-attachments/assets/423db027-d19c-45a1-b353-2bf2bff2bc53" />
+
+
 
 ---
 
 ## 🔮 Future Work
 
 | Enhancement | Description |
-|------------|-------------|
+|:-----------|:------------|
 | 🗃️ **Larger Dataset** | Train on a more diverse, larger fingerprint-blood group dataset for better generalization |
 | 🔍 **Multi-finger Fusion** | Use all 10 fingerprints to improve prediction reliability |
 | 📱 **Mobile App** | Deploy as a lightweight mobile application (TFLite) |
@@ -453,11 +428,9 @@ The deployed interface at [sravaninanubala-ridgevision-ai.hf.space](https://srav
 ## 👥 Team
 
 | Name |
-|------|
+|:-----|
 | **N. Sravani** |
-| **N. B. Bhuvana Deepthi** |
 | **P. Likhitha** |
-| **R. Kishore** |
 
 ---
 
@@ -493,4 +466,3 @@ This project is released for **academic research and educational purposes only**
 [![Kaggle](https://img.shields.io/badge/Kaggle-Training%20Notebook-20BEFF?style=for-the-badge&logo=kaggle)](https://www.kaggle.com/code/sravaninanubala/90-accuracy)
 
 </div>
-
